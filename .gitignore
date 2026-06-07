@@ -3,8 +3,8 @@
 # Configured to include iOS build sources while excluding generated/secret files
 # =============================================================================
 
-# ── Secrets — NEVER commit ───────────────────────────────────────────────────
-lib/config/api_config.dart
+# ── Secrets — add your real OpenRouter key locally in api_config.dart ────────
+# lib/config/api_config.dart is committed with a placeholder — safe to push
 
 # ── Flutter generated files ──────────────────────────────────────────────────
 .dart_tool/
