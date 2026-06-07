@@ -23,7 +23,7 @@ android/app/src/main/java/io/flutter/plugins/
 
 # ── iOS — exclude generated/local-only files, keep everything else ───────────
 
-# CocoaPods — installed by CI, not committed
+# CocoaPods — no longer used, project uses Swift Package Manager
 ios/Pods/
 ios/.symlinks/
 ios/Podfile.lock

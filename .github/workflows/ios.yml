@@ -22,10 +22,7 @@ jobs:
         run: flutter pub get
 
       - name: Build iOS (no codesign)
-        run: |
-          flutter build ios --release \
-            --no-codesign \
-            --dart-define=FLUTTER_TARGET=lib/main.dart
+        run: flutter build ios --release --no-codesign
         env:
           CODE_SIGN_IDENTITY: ""
           CODE_SIGNING_REQUIRED: "NO"
