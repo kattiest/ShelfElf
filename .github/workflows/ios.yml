@@ -21,6 +21,18 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
+      - name: Create API config from secret
+        run: |
+          cat > lib/config/api_config.dart << 'EOF'
+          class ApiConfig {
+            ApiConfig._();
+            static const String openRouterApiKey = '${{ secrets.OPENROUTER_API_KEY }}';
+            static const String model = 'google/gemma-4-31b-it:free';
+            static const String baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
+            static const String appName = 'ShelfElf';
+          }
+          EOF
+
       - name: Install xcpretty
         run: gem install xcpretty
 
