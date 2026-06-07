@@ -1,0 +1,84 @@
+# =============================================================================
+# Shelf Elf — .gitignore
+# Configured to include iOS build sources while excluding generated/secret files
+# =============================================================================
+
+# ── Secrets — NEVER commit ───────────────────────────────────────────────────
+lib/config/api_config.dart
+
+# ── Flutter generated files ──────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.iml
+flutter_export_environment.sh
+
+# ── Android ──────────────────────────────────────────────────────────────────
+android/.gradle/
+android/local.properties
+android/key.properties
+android/app/src/main/java/io/flutter/plugins/
+
+# ── iOS — exclude generated/local-only files, keep everything else ───────────
+
+# CocoaPods — installed by CI, not committed
+ios/Pods/
+ios/.symlinks/
+ios/Podfile.lock
+
+# Xcode ephemeral/generated — rebuilt on every machine
+ios/Flutter/ephemeral/
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# Xcode user-specific state
+ios/**/*.xcuserstate
+ios/**/*.xcuserdatad/
+ios/**/xcuserdata/
+ios/**/*.moved-aside
+ios/Runner.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+ios/Runner.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+
+# Xcode build output
+ios/build/
+ios/DerivedData/
+
+# ── What IS committed for iOS (everything not matched above) ─────────────────
+# ios/Runner/Info.plist                 ← app permissions + URL scheme
+# ios/Runner/AppDelegate.swift          ← app entry point
+# ios/Runner/SceneDelegate.swift        ← scene lifecycle
+# ios/Runner/Runner-Bridging-Header.h   ← ObjC/Swift bridge
+# ios/Runner/Assets.xcassets/           ← app icons + launch images
+# ios/Runner/Base.lproj/               ← storyboards
+# ios/Runner.xcodeproj/project.pbxproj ← Xcode project file
+# ios/Runner.xcodeproj/xcshareddata/   ← shared schemes
+# ios/Flutter/AppFrameworkInfo.plist   ← framework metadata
+# ios/Flutter/Debug.xcconfig           ← debug build config
+# ios/Flutter/Release.xcconfig         ← release build config
+# ios/Podfile                          ← CocoaPods config (min iOS version etc.)
+# ios/RunnerTests/                     ← test target
+# .github/workflows/ios.yml            ← GitHub Actions build workflow
+
+# ── macOS (if ever added) ────────────────────────────────────────────────────
+macos/Flutter/ephemeral/
+macos/Pods/
+
+# ── Web (if ever added) ──────────────────────────────────────────────────────
+web/
+
+# ── IDE ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.md
+
