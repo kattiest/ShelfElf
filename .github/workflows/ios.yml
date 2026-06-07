@@ -24,10 +24,13 @@ jobs:
       - name: Install xcpretty
         run: gem install xcpretty
 
-      - name: Build Flutter iOS framework
-        run: flutter build ios --release --no-codesign
+      - name: Generate Flutter engine files
+        run: flutter build ios --simulator
+        # Build for simulator first — no signing needed at all,
+        # this generates the Flutter.framework and plugin artifacts
+        # that xcodebuild needs without touching device signing.
 
-      - name: Build IPA with xcodebuild (unsigned)
+      - name: Archive with xcodebuild (unsigned device build)
         run: |
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
@@ -41,12 +44,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             DEVELOPMENT_TEAM="" \
-            | xcpretty
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            | xcpretty --color
 
-      - name: Export unsigned IPA
+      - name: Package unsigned IPA
         run: |
           mkdir -p Payload
-          cp -r $RUNNER_TEMP/ShelfElf.xcarchive/Products/Applications/Runner.app Payload/
+          cp -r "$RUNNER_TEMP/ShelfElf.xcarchive/Products/Applications/Runner.app" Payload/
           zip -r ShelfElf.ipa Payload/
 
       - uses: actions/upload-artifact@v4
