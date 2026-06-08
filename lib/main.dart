@@ -112,12 +112,16 @@ class _AppShellState extends State<AppShell> {
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
 
-  final _pages = const [
-    InventoryScreen(),
-    ShoppingListScreen(),
-    MealPlanScreen(),
-    AiChatScreen(),
+  // Keep pages alive when switching tabs using lazy initialization
+  late final List<Widget> _pages = [
+    const InventoryScreen(),
+    const ShoppingListScreen(),
+    const MealPlanScreen(),
+    const AiChatScreen(),
   ];
+
+  // Track which tabs have been visited so unvisited ones aren't built yet
+  final Set<int> _visitedTabs = {0};
 
   @override
   void initState() {
@@ -144,11 +148,15 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _handleLink(Uri uri) {
+    // Handle both https web links and pantrypal:// direct deep links
     final items = ShareService.instance.decodeUrl(uri.toString());
     if (items == null || items.isEmpty) return;
 
     // Switch to shopping list tab
-    setState(() => _currentIndex = 1);
+    setState(() {
+      _currentIndex = 1;
+      _visitedTabs.add(1);
+    });
 
     // Show import dialog
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -170,7 +178,13 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _pages,
+        children: _pages.asMap().entries.map((e) {
+          // Don't build tabs that haven't been visited yet
+          if (!_visitedTabs.contains(e.key)) {
+            return const SizedBox.shrink();
+          }
+          return e.value;
+        }).toList(),
       ),
       bottomNavigationBar: Consumer<InventoryProvider>(
         builder: (context, provider, _) {
@@ -179,7 +193,10 @@ class _AppShellState extends State<AppShell> {
           return NavigationBar(
             selectedIndex: _currentIndex,
             onDestinationSelected: (i) =>
-                setState(() => _currentIndex = i),
+                setState(() {
+                  _currentIndex = i;
+                  _visitedTabs.add(i);
+                }),
             backgroundColor: cs.surface,
             indicatorColor: cs.primaryContainer,
             destinations: [

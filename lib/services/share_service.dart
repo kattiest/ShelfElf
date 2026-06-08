@@ -2,19 +2,23 @@ import 'dart:convert';
 import 'package:share_plus/share_plus.dart';
 import '../models/food_item.dart';
 
-/// Encodes a shopping list into a deep link URL and shares it.
-/// The list is serialised as JSON, base64-encoded, and embedded in the URL:
-///   pantrypal://list/<base64>
+/// Encodes a shopping list into a shareable https:// link.
 ///
-/// No server required — all data travels in the link itself.
+/// The link points to a GitHub Pages redirect page which immediately
+/// opens the app via the pantrypal:// deep link scheme.
+/// Using https:// means SMS/WhatsApp renders it as a tappable link.
+///
+/// Format: https://kattiest.github.io/ShelfElf/?list=<base64>
+/// Which redirects to: pantrypal://list/<base64>
 class ShareService {
   ShareService._();
   static final ShareService instance = ShareService._();
 
-  static const _scheme = 'pantrypal';
-  static const _host = 'list';
+  static const _webBase = 'https://kattiest.github.io/ShelfElf/';
+  static const _appScheme = 'pantrypal';
+  static const _appHost = 'list';
 
-  /// Encode [items] into a shareable deep-link URL string.
+  /// Encode [items] into a shareable https link.
   String encodeList(List<FoodItem> items) {
     final data = items
         .map((i) => {
@@ -25,20 +29,27 @@ class ShareService {
         .toList();
 
     final json = jsonEncode(data);
-    // Use URL-safe base64 so the link survives SMS/WhatsApp encoding
     final encoded = base64Url.encode(utf8.encode(json));
-    return '$_scheme://$_host/$encoded';
+    return '$_webBase?list=$encoded';
   }
 
-  /// Decode a deep-link URL back into a list of [SharedItem]s.
-  /// Returns null if the URL is invalid or malformed.
+  /// Decode either a https web link or a pantrypal:// deep link.
   List<SharedItem>? decodeUrl(String url) {
     try {
       final uri = Uri.parse(url);
-      if (uri.scheme != _scheme || uri.host != _host) return null;
 
-      // Path is /<encoded>, strip the leading /
-      final encoded = uri.pathSegments.first;
+      String? encoded;
+
+      if (uri.scheme == 'https' && uri.queryParameters.containsKey('list')) {
+        // Web redirect link: https://kattiest.github.io/ShelfElf/?list=xxx
+        encoded = uri.queryParameters['list'];
+      } else if (uri.scheme == _appScheme && uri.host == _appHost) {
+        // Legacy direct deep link: pantrypal://list/xxx
+        encoded = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
+      }
+
+      if (encoded == null || encoded.isEmpty) return null;
+
       final json = utf8.decode(base64Url.decode(encoded));
       final data = jsonDecode(json) as List<dynamic>;
 
@@ -60,12 +71,16 @@ class ShareService {
     if (items.isEmpty) return;
 
     final url = encodeList(items);
-    final names = items.map((i) => '• ${i.product}').join('\n');
-    final intro = senderName != null
-        ? '$senderName shared a PantryPal shopping list with you:'
-        : 'Here\'s a PantryPal shopping list:';
+    final count = items.length;
 
-    final message = '$intro\n\n$names\n\nTap to import:\n$url';
+    // Show a clean preview — the URL is embedded, not shown raw
+    final intro = senderName != null
+        ? '$senderName sent you a Shelf Elf shopping list'
+        : 'Shelf Elf Shopping List';
+
+    // The message body is just the title + item count
+    // The URL renders as a rich card in iMessage/WhatsApp
+    final message = '$intro — $count item${count == 1 ? '' : 's'}\n$url';
 
     await Share.share(message);
   }

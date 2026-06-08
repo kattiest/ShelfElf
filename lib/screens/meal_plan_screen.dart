@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../models/food_item.dart';
 import '../models/meal_plan.dart';
 import '../providers/inventory_provider.dart';
@@ -19,13 +20,11 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
   List<MealPlan> _meals = [];
   bool _loading = false;
 
-  static const _mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
   static const _days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   @override
   void initState() {
     super.initState();
-    // Week starts on Monday
     final now = DateTime.now();
     _weekStart = now.subtract(Duration(days: now.weekday - 1));
     _weekStart = DateTime(_weekStart.year, _weekStart.month, _weekStart.day);
@@ -41,13 +40,14 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
   DateTime _dayDate(int dayIndex) =>
       _weekStart.add(Duration(days: dayIndex));
 
-  List<MealPlan> _mealsForSlot(int dayIndex, String mealType) {
+  MealPlan? _dinnerForDay(int dayIndex) {
     final date = _dayDate(dayIndex);
-    return _meals.where((m) =>
+    final matches = _meals.where((m) =>
         m.date.year == date.year &&
         m.date.month == date.month &&
         m.date.day == date.day &&
-        m.mealType == mealType).toList();
+        m.mealType == 'Dinner').toList();
+    return matches.isEmpty ? null : matches.first;
   }
 
   void _prevWeek() {
@@ -69,31 +69,81 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
     _loadMeals();
   }
 
-  Future<void> _addMeal(int dayIndex, String mealType) async {
+  Future<void> _planDinner(int dayIndex) async {
     final inventory = context.read<InventoryProvider>().items.toList();
     final date = _dayDate(dayIndex);
+    final existing = _dinnerForDay(dayIndex);
 
     final result = await showDialog<_MealEntry>(
       context: context,
-      builder: (ctx) => _AddMealDialog(
+      builder: (ctx) => _PlanDinnerDialog(
         date: date,
-        mealType: mealType,
         inventory: inventory,
+        existing: existing,
       ),
     );
 
-    if (result == null) return;
+    if (result == null || !mounted) return;
+
+    // Save meal to DB
+    if (existing != null) {
+      await DatabaseService.instance.deleteMeal(existing.id);
+      setState(() => _meals.removeWhere((m) => m.id == existing.id));
+    }
 
     final meal = MealPlan(
       id: 0,
       date: date,
-      mealType: result.mealType,
+      mealType: 'Dinner',
       mealName: result.mealName,
       ingredients: result.ingredients,
     );
-
     final id = await DatabaseService.instance.insertMeal(meal);
     setState(() => _meals.add(meal.copyWith(id: id)));
+
+    // Auto-add missing ingredients to shopping list
+    if (result.missingIngredients.isNotEmpty) {
+      _addMissingToShoppingList(result.missingIngredients);
+    }
+  }
+
+  void _addMissingToShoppingList(List<String> missing) {
+    final provider = context.read<InventoryProvider>();
+    int added = 0;
+
+    for (final name in missing) {
+      final exists = provider.items.any(
+          (i) => i.product.toLowerCase() == name.toLowerCase());
+      if (exists) continue;
+
+      provider.addItem(FoodItem(
+        upc: '',
+        product: name,
+        packageSize: 0,
+        servingSize: 0,
+        sellByDate: '',
+        percentUsed: 100,
+        location: 'Shopping List',
+        orderingLevel: 100,
+      ));
+      added++;
+    }
+
+    if (added > 0 && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+            '$added missing ingredient${added == 1 ? '' : 's'} added to shopping list'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () {
+            // Switch to shopping tab (index 1)
+            // We use the root navigator context here
+          },
+        ),
+      ));
+    }
   }
 
   Future<void> _deleteMeal(MealPlan meal) async {
@@ -101,19 +151,17 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
     setState(() => _meals.removeWhere((m) => m.id == meal.id));
   }
 
-  /// Collect all missing ingredients across the whole week's plan
   List<String> get _missingIngredients {
     final inventory = context.read<InventoryProvider>().items;
     final inventoryNames =
         inventory.map((i) => i.product.toLowerCase()).toSet();
-
     final missing = <String>{};
     for (final meal in _meals) {
       for (final ing in meal.ingredients) {
         final lower = ing.toLowerCase();
-        final found = inventoryNames.any(
-            (name) => name.contains(lower) || lower.contains(name));
-        if (!found) missing.add(ing);
+        if (!inventoryNames.any((n) => n.contains(lower) || lower.contains(n))) {
+          missing.add(ing);
+        }
       }
     }
     return missing.toList()..sort();
@@ -124,17 +172,17 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
     final cs = Theme.of(context).colorScheme;
     final today = DateTime.now();
     final weekLabel =
-        '${DateFormat('MMM d').format(_weekStart)} – ${DateFormat('MMM d').format(_weekStart.add(const Duration(days: 6)))}';
+        '${DateFormat('MMM d').format(_weekStart)} – '
+        '${DateFormat('MMM d').format(_weekStart.add(const Duration(days: 6)))}';
     final missing = _missingIngredients;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meal Planner'),
+        title: const Text('Dinner Planner'),
         actions: [
           TextButton(
             onPressed: _today,
-            child: const Text('Today',
-                style: TextStyle(color: Colors.white)),
+            child: const Text('Today', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -142,11 +190,11 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // ── Week nav bar ─────────────────────────────────────────
+                // ── Week nav ─────────────────────────────────────────────
                 Container(
                   color: cs.primaryContainer,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   child: Row(
                     children: [
                       IconButton(
@@ -173,7 +221,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                   ),
                 ),
 
-                // ── Missing ingredients banner ───────────────────────────
+                // ── Missing ingredients banner ────────────────────────────
                 if (missing.isNotEmpty)
                   InkWell(
                     onTap: () => _showMissingDialog(missing),
@@ -189,7 +237,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${missing.length} ingredient${missing.length == 1 ? '' : 's'} needed for this week — tap to see',
+                              '${missing.length} ingredient${missing.length == 1 ? '' : 's'} still needed this week',
                               style: TextStyle(
                                   color: cs.onErrorContainer, fontSize: 13),
                             ),
@@ -201,7 +249,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                     ),
                   ),
 
-                // ── Day columns ──────────────────────────────────────────
+                // ── Day list ─────────────────────────────────────────────
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 24),
@@ -211,57 +259,21 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                       final isToday = date.year == today.year &&
                           date.month == today.month &&
                           date.day == today.day;
+                      final dinner = _dinnerForDay(dayIndex);
 
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Day header
-                          Container(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: isToday
-                                        ? cs.primary
-                                        : cs.surfaceContainerHigh,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    '${_days[dayIndex]}  ${DateFormat('d').format(date)}',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: isToday
-                                          ? cs.onPrimary
-                                          : cs.onSurface,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Meal type rows
-                          ..._mealTypes.map((type) {
-                            final slotMeals =
-                                _mealsForSlot(dayIndex, type);
-                            return _MealSlotRow(
-                              mealType: type,
-                              meals: slotMeals,
-                              inventory: context
-                                  .read<InventoryProvider>()
-                                  .items
-                                  .toList(),
-                              onAdd: () => _addMeal(dayIndex, type),
-                              onDelete: _deleteMeal,
-                            );
-                          }),
-
-                          const Divider(height: 1),
-                        ],
+                      return _DayRow(
+                        dayLabel:
+                            '${_days[dayIndex]}  ${DateFormat('MMM d').format(date)}',
+                        isToday: isToday,
+                        meal: dinner,
+                        inventory: context
+                            .read<InventoryProvider>()
+                            .items
+                            .toList(),
+                        onTap: () => _planDinner(dayIndex),
+                        onDelete: dinner != null
+                            ? () => _deleteMeal(dinner)
+                            : null,
                       );
                     },
                   ),
@@ -280,7 +292,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
             Icon(Icons.shopping_cart_outlined,
                 color: Theme.of(ctx).colorScheme.primary),
             const SizedBox(width: 8),
-            const Text('Needed This Week'),
+            const Text('Still Needed'),
           ],
         ),
         content: SizedBox(
@@ -308,94 +320,29 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
   }
 }
 
-// ── Meal slot row ─────────────────────────────────────────────────────────────
+// ── Day row ───────────────────────────────────────────────────────────────────
 
-class _MealSlotRow extends StatelessWidget {
-  final String mealType;
-  final List<MealPlan> meals;
+class _DayRow extends StatelessWidget {
+  final String dayLabel;
+  final bool isToday;
+  final MealPlan? meal;
   final List<FoodItem> inventory;
-  final VoidCallback onAdd;
-  final void Function(MealPlan) onDelete;
+  final VoidCallback onTap;
+  final VoidCallback? onDelete;
 
-  const _MealSlotRow({
-    required this.mealType,
-    required this.meals,
-    required this.inventory,
-    required this.onAdd,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Meal type label
-          SizedBox(
-            width: 72,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                mealType,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-
-          // Meal chips + add button
-          Expanded(
-            child: Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                ...meals.map((meal) => _MealChip(
-                      meal: meal,
-                      inventory: inventory,
-                      onDelete: () => onDelete(meal),
-                    )),
-                ActionChip(
-                  label: const Text('+ Add'),
-                  labelStyle:
-                      TextStyle(fontSize: 12, color: cs.primary),
-                  side: BorderSide(color: cs.primary.withAlpha(80)),
-                  backgroundColor: Colors.transparent,
-                  padding: EdgeInsets.zero,
-                  onPressed: onAdd,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Meal chip ─────────────────────────────────────────────────────────────────
-
-class _MealChip extends StatelessWidget {
-  final MealPlan meal;
-  final List<FoodItem> inventory;
-  final VoidCallback onDelete;
-
-  const _MealChip({
+  const _DayRow({
+    required this.dayLabel,
+    required this.isToday,
     required this.meal,
     required this.inventory,
+    required this.onTap,
     required this.onDelete,
   });
 
   bool get _hasMissing {
+    if (meal == null) return false;
     final names = inventory.map((i) => i.product.toLowerCase()).toSet();
-    return meal.ingredients.any((ing) {
+    return meal!.ingredients.any((ing) {
       final lower = ing.toLowerCase();
       return !names.any((n) => n.contains(lower) || lower.contains(n));
     });
@@ -406,126 +353,255 @@ class _MealChip extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final missing = _hasMissing;
 
-    return GestureDetector(
-      onLongPress: () => _confirmDelete(context),
-      child: Chip(
-        label: Text(
-          meal.mealName,
-          style: const TextStyle(fontSize: 12),
-        ),
-        avatar: missing
-            ? Icon(Icons.warning_amber_rounded,
-                size: 14, color: cs.error)
-            : Icon(Icons.check_circle_outline,
-                size: 14, color: Colors.green[600]),
-        backgroundColor:
-            missing ? cs.errorContainer : Colors.green.shade50,
-        side: BorderSide.none,
-        deleteIcon: const Icon(Icons.close, size: 14),
-        onDeleted: onDelete,
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isToday
+            ? BorderSide(color: cs.primary, width: 2)
+            : BorderSide.none,
       ),
-    );
-  }
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+          child: Row(
+            children: [
+              // Day label
+              SizedBox(
+                width: 90,
+                child: Text(
+                  dayLabel,
+                  style: TextStyle(
+                    fontWeight:
+                        isToday ? FontWeight.bold : FontWeight.w500,
+                    fontSize: 13,
+                    color: isToday ? cs.primary : cs.onSurface,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
 
-  Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove meal?'),
-        content: Text('Remove "${meal.mealName}" from the plan?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Remove')),
-        ],
+              // Meal or empty prompt
+              Expanded(
+                child: meal == null
+                    ? Row(
+                        children: [
+                          Icon(Icons.add_circle_outline,
+                              size: 16, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Plan dinner…',
+                            style: TextStyle(
+                              color: cs.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Icon(
+                            missing
+                                ? Icons.warning_amber_rounded
+                                : Icons.check_circle_outline,
+                            size: 16,
+                            color: missing
+                                ? cs.error
+                                : Colors.green[600],
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              meal!.mealName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+
+              // Delete button
+              if (meal != null && onDelete != null)
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  color: cs.onSurfaceVariant,
+                  onPressed: onDelete,
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        ),
       ),
     );
-    if (confirmed == true) onDelete();
   }
 }
 
-// ── Add meal dialog ───────────────────────────────────────────────────────────
+// ── Plan dinner dialog ────────────────────────────────────────────────────────
 
 class _MealEntry {
   final String mealName;
-  final String mealType;
   final List<String> ingredients;
-  const _MealEntry(
-      {required this.mealName,
-      required this.mealType,
-      required this.ingredients});
+  final List<String> missingIngredients;
+
+  const _MealEntry({
+    required this.mealName,
+    required this.ingredients,
+    required this.missingIngredients,
+  });
 }
 
-class _AddMealDialog extends StatefulWidget {
+class _PlanDinnerDialog extends StatefulWidget {
   final DateTime date;
-  final String mealType;
   final List<FoodItem> inventory;
+  final MealPlan? existing;
 
-  const _AddMealDialog({
+  const _PlanDinnerDialog({
     required this.date,
-    required this.mealType,
     required this.inventory,
+    this.existing,
   });
 
   @override
-  State<_AddMealDialog> createState() => _AddMealDialogState();
+  State<_PlanDinnerDialog> createState() => _PlanDinnerDialogState();
 }
 
-class _AddMealDialogState extends State<_AddMealDialog> {
+class _PlanDinnerDialogState extends State<_PlanDinnerDialog> {
   final _controller = TextEditingController();
-  late String _selectedType;
-  bool _lookingUp = false;
-  List<String> _ingredients = [];
+  final _speech = SpeechToText();
 
-  static const _mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+  bool _isListening = false;
+  bool _speechAvailable = false;
+  bool _isLookingUp = false;
+  String _liveTranscript = '';
+
+  List<String> _allIngredients = [];
+  List<String> _missingIngredients = [];
 
   @override
   void initState() {
     super.initState();
-    _selectedType = widget.mealType;
     _controller.addListener(() => setState(() {}));
+    _initSpeech();
+
+    // Pre-fill if editing existing
+    if (widget.existing != null) {
+      _controller.text = widget.existing!.mealName;
+    }
+  }
+
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize();
+    if (mounted) setState(() => _speechAvailable = available);
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _speech.cancel();
     super.dispose();
+  }
+
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      if (_liveTranscript.isNotEmpty) {
+        _controller.text = _liveTranscript;
+        _liveTranscript = '';
+        await _lookupIngredients();
+      }
+      return;
+    }
+
+    setState(() {
+      _isListening = true;
+      _liveTranscript = '';
+      _allIngredients = [];
+      _missingIngredients = [];
+    });
+
+    await _speech.listen(
+      onResult: (result) {
+        setState(() => _liveTranscript = result.recognizedWords);
+        if (result.finalResult && result.recognizedWords.isNotEmpty) {
+          _speech.stop();
+          setState(() {
+            _isListening = false;
+            _controller.text = result.recognizedWords;
+            _liveTranscript = '';
+          });
+          _lookupIngredients();
+        }
+      },
+      listenFor: const Duration(seconds: 20),
+      pauseFor: const Duration(seconds: 2),
+      localeId: 'en_US',
+    );
   }
 
   Future<void> _lookupIngredients() async {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
 
-    setState(() { _lookingUp = true; _ingredients = []; });
+    setState(() {
+      _isLookingUp = true;
+      _allIngredients = [];
+      _missingIngredients = [];
+    });
 
     try {
       final response = await GeminiService.instance.askAboutMeal(
         userMessage: name,
         inventory: widget.inventory,
       );
-      if (mounted) {
-        setState(() {
-          _ingredients =
-              response.ingredients.map((i) => i.name).toList();
-          _lookingUp = false;
-        });
-      }
+
+      if (!mounted) return;
+
+      final inventoryNames =
+          widget.inventory.map((i) => i.product.toLowerCase()).toSet();
+
+      final all = response.ingredients.map((i) => i.name).toList();
+      final missing = all.where((ing) {
+        final lower = ing.toLowerCase();
+        return !inventoryNames
+            .any((n) => n.contains(lower) || lower.contains(n));
+      }).toList();
+
+      setState(() {
+        _allIngredients = all;
+        _missingIngredients = missing;
+        _isLookingUp = false;
+      });
     } catch (_) {
-      if (mounted) setState(() => _lookingUp = false);
+      if (mounted) setState(() => _isLookingUp = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final dateStr = DateFormat('EEEE, MMM d').format(widget.date);
+    final canSave = _controller.text.trim().isNotEmpty && !_isLookingUp;
 
     return AlertDialog(
-      title: Text(
-          'Add ${DateFormat('EEE, MMM d').format(widget.date)}'),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Plan Dinner'),
+          Text(dateStr,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.normal)),
+        ],
+      ),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -533,74 +609,130 @@ class _AddMealDialogState extends State<_AddMealDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Meal type selector
-              DropdownButtonFormField<String>(
-                value: _selectedType,
-                decoration: const InputDecoration(labelText: 'Meal'),
-                items: _mealTypes
-                    .map((t) =>
-                        DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (v) =>
-                    setState(() => _selectedType = v ?? _selectedType),
-              ),
-              const SizedBox(height: 12),
-
-              // Meal name + AI lookup
+              // ── Input row ────────────────────────────────────────────
               Row(
                 children: [
+                  // Mic button
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    decoration: BoxDecoration(
+                      color: _isListening ? cs.error : cs.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        _isListening ? Icons.stop : Icons.mic,
+                        color: _isListening
+                            ? cs.onError
+                            : cs.onPrimaryContainer,
+                        size: 20,
+                      ),
+                      onPressed:
+                          _speechAvailable ? _toggleListening : null,
+                      tooltip: _isListening ? 'Stop' : 'Speak meal name',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: TextField(
                       controller: _controller,
-                      decoration: const InputDecoration(
-                        labelText: 'Meal name',
-                        hintText: 'e.g. Lasagna',
+                      decoration: InputDecoration(
+                        labelText: 'What\'s for dinner?',
+                        hintText: _isListening
+                            ? (_liveTranscript.isNotEmpty
+                                ? _liveTranscript
+                                : 'Listening…')
+                            : 'e.g. Lasagna',
                       ),
                       textCapitalization: TextCapitalization.words,
                       onSubmitted: (_) => _lookupIngredients(),
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // AI lookup button
                   IconButton.filled(
-                    icon: _lookingUp
+                    icon: _isLookingUp
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white))
+                                strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.auto_awesome, size: 18),
-                    tooltip: 'Look up ingredients with AI',
-                    onPressed: _lookingUp ? null : _lookupIngredients,
+                    tooltip: 'Check ingredients with AI',
+                    onPressed: (_isLookingUp ||
+                            _controller.text.trim().isEmpty)
+                        ? null
+                        : _lookupIngredients,
                   ),
                 ],
               ),
 
-              // Ingredient list
-              if (_ingredients.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text('Ingredients (${_ingredients.length})',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
+              // ── Ingredient results ───────────────────────────────────
+              if (_allIngredients.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${_allIngredients.length} ingredients',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                    if (_missingIngredients.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: cs.errorContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${_missingIngredients.length} missing — will add to shopping list',
+                          style: TextStyle(
+                              fontSize: 11, color: cs.onErrorContainer),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'All in stock!',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.green.shade800),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
                   runSpacing: 4,
-                  children: _ingredients.map((ing) {
-                    final inStock = widget.inventory.any((item) {
-                      final lower = ing.toLowerCase();
-                      final name = item.product.toLowerCase();
-                      return name.contains(lower) ||
-                          lower.contains(name);
-                    });
+                  children: _allIngredients.map((ing) {
+                    final isMissing = _missingIngredients.contains(ing);
                     return Chip(
                       label: Text(ing,
                           style: const TextStyle(fontSize: 11)),
-                      backgroundColor: inStock
-                          ? Colors.green.shade50
-                          : cs.errorContainer,
+                      avatar: Icon(
+                        isMissing
+                            ? Icons.add_shopping_cart
+                            : Icons.check,
+                        size: 12,
+                        color: isMissing
+                            ? cs.onErrorContainer
+                            : Colors.green[700],
+                      ),
+                      backgroundColor: isMissing
+                          ? cs.errorContainer
+                          : Colors.green.shade50,
                       side: BorderSide.none,
                       padding: EdgeInsets.zero,
                     );
@@ -616,17 +748,16 @@ class _AddMealDialogState extends State<_AddMealDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: _controller.text.trim().isEmpty
-              ? null
-              : () {
-                  Navigator.of(context).pop(_MealEntry(
+        FilledButton.icon(
+          icon: const Icon(Icons.dinner_dining, size: 16),
+          label: const Text('Plan It'),
+          onPressed: canSave
+              ? () => Navigator.of(context).pop(_MealEntry(
                     mealName: _controller.text.trim(),
-                    mealType: _selectedType,
-                    ingredients: _ingredients,
-                  ));
-                },
-          child: const Text('Add'),
+                    ingredients: _allIngredients,
+                    missingIngredients: _missingIngredients,
+                  ))
+              : null,
         ),
       ],
     );

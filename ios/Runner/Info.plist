@@ -34,8 +34,15 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>pantrypal</string>
+				<string>https</string>
 			</array>
 		</dict>
+	</array>
+
+	<!-- Associated domain for https deep links -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:kattiest.github.io</string>
 	</array>
 
 	<!-- Camera — required by mobile_scanner for barcode scanning -->

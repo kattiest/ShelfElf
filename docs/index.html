@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- OpenGraph tags — these make iMessage/WhatsApp show a rich card
+       instead of the raw URL -->
+  <meta property="og:site_name" content="Shelf Elf">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://kattiest.github.io/ShelfElf/icon.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+
+  <!-- These are overridden by JS below once the list is decoded -->
+  <meta property="og:title" content="Shelf Elf Shopping List">
+  <meta property="og:description" content="Tap to import this shopping list into Shelf Elf">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Shelf Elf Shopping List">
+  <meta name="twitter:description" content="Tap to import this shopping list into Shelf Elf">
+
+  <title>Shelf Elf — Shopping List</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f8f1;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 32px 24px;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+    .icon { font-size: 48px; margin-bottom: 12px; }
+    h1 { color: #2e7d32; font-size: 22px; margin-bottom: 6px; }
+    .subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
+    .items {
+      background: #f9f9f9;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      text-align: left;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .item {
+      padding: 7px 0;
+      color: #333;
+      font-size: 15px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .item:last-child { border-bottom: none; }
+    .dot {
+      width: 8px; height: 8px;
+      background: #4caf50;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .btn {
+      display: block;
+      background: #4caf50;
+      color: white;
+      text-decoration: none;
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      cursor: pointer;
+      border: none;
+      width: 100%;
+      transition: background 0.15s;
+    }
+    .btn:active { background: #388e3c; }
+    .note { color: #aaa; font-size: 12px; }
+    .error { color: #c62828; font-size: 13px; margin-top: 12px; display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🧝</div>
+    <h1>Shelf Elf</h1>
+    <p class="subtitle" id="subtitle">Shared Shopping List</p>
+    <div class="items" id="itemList"></div>
+    <button class="btn" id="openBtn" onclick="openApp()">
+      Add to My Shelf Elf
+    </button>
+    <p class="note">Shelf Elf must be installed on your device</p>
+    <p class="error" id="error">
+      Shelf Elf doesn't appear to be installed. Download it and try again.
+    </p>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const encoded = params.get('list');
+    const itemList = document.getElementById('itemList');
+    const subtitle = document.getElementById('subtitle');
+
+    let items = [];
+
+    if (!encoded) {
+      itemList.innerHTML =
+        '<p style="color:#aaa;text-align:center;padding:8px">No list data.</p>';
+    } else {
+      try {
+        // base64url → JSON
+        const b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+        const json = decodeURIComponent(
+          Array.from(atob(b64))
+            .map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+            .join('')
+        );
+        items = JSON.parse(json);
+
+        subtitle.textContent =
+          `${items.length} item${items.length === 1 ? '' : 's'} to add`;
+
+        items.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'item';
+          div.innerHTML =
+            `<span class="dot"></span>` +
+            `<span>${item.p}${item.l && item.l !== 'Shopping List'
+              ? ' <span style="color:#aaa;font-size:12px">' + item.l + '</span>'
+              : ''}</span>`;
+          itemList.appendChild(div);
+        });
+      } catch (e) {
+        itemList.innerHTML =
+          '<p style="color:#aaa;text-align:center;padding:8px">Could not read list.</p>';
+      }
+    }
+
+    function openApp() {
+      if (!encoded) return;
+      window.location.href = `pantrypal://list/${encoded}`;
+      setTimeout(() => {
+        document.getElementById('error').style.display = 'block';
+      }, 2500);
+    }
+
+    // Auto-attempt on mobile
+    if (/Android|iPhone|iPad/i.test(navigator.userAgent) && encoded) {
+      setTimeout(openApp, 400);
+    }
+  </script>
+</body>
+</html>
