@@ -17,7 +17,7 @@ class BarcodeLookupService {
 
     try {
       final response = await http
-          .get(uri, headers: {'User-Agent': 'PantryPal/1.0 (Flutter)'})
+          .get(uri, headers: {'User-Agent': 'ShelfElf/1.0 (Flutter)'})
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) return null;

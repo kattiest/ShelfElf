@@ -6,6 +6,9 @@
 # ── Secrets — add your real OpenRouter key locally in api_config.dart ────────
 # lib/config/api_config.dart is committed with a placeholder — safe to push
 
+# Netlify site ID — local only
+.netlify_site_id
+
 # ── Flutter generated files ──────────────────────────────────────────────────
 .dart_tool/
 .flutter-plugins

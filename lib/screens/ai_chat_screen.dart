@@ -220,7 +220,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ask PantryPal AI'),
+        title: const Text('Ask Shelf Elf AI'),
         actions: [
           if (_messages.length > 1)
             IconButton(

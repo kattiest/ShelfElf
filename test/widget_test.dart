@@ -3,7 +3,7 @@ import 'package:shelf_elf/main.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const PantryPalApp());
-    expect(find.byType(PantryPalApp), findsOneWidget);
+    await tester.pumpWidget(const ShelfElfApp());
+    expect(find.byType(ShelfElfApp), findsOneWidget);
   });
 }

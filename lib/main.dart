@@ -12,11 +12,11 @@ import 'services/share_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const PantryPalApp());
+  runApp(const ShelfElfApp());
 }
 
-class PantryPalApp extends StatelessWidget {
-  const PantryPalApp({super.key});
+class ShelfElfApp extends StatelessWidget {
+  const ShelfElfApp({super.key});
 
   @override
   Widget build(BuildContext context) {

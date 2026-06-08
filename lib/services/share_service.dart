@@ -14,7 +14,9 @@ class ShareService {
   ShareService._();
   static final ShareService instance = ShareService._();
 
-  static const _webBase = 'https://kattiest.github.io/ShelfElf/';
+  /// Update this after running deploy_netlify.sh — replace with your Netlify URL
+  /// e.g. 'https://shelf-elf-share.netlify.app/'
+  static const _webBase = 'https://shelf-elf-share.netlify.app/';
   static const _appScheme = 'pantrypal';
   static const _appHost = 'list';
 

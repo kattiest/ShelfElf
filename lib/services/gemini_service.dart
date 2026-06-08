@@ -37,7 +37,7 @@ class GeminiService {
 
   static const _headers = {
     'Content-Type': 'application/json',
-    'HTTP-Referer': 'https://github.com/pantrypal',
+    'HTTP-Referer': 'https://github.com/kattiest/ShelfElf',
     'X-Title': ApiConfig.appName,
   };
 
@@ -90,7 +90,7 @@ class GeminiService {
           }).join('\n');
 
     final systemPrompt = '''
-You are PantryPal, a friendly kitchen and pantry assistant built into a food inventory app.
+You are Shelf Elf, a friendly kitchen and pantry assistant built into a food inventory app.
 The user's current pantry inventory:
 $inventorySummary
 
@@ -136,7 +136,7 @@ Keep your total response concise and practical.
             .join('\n');
 
     final systemPrompt = '''
-You are PantryPal, a friendly kitchen and pantry assistant.
+You are Shelf Elf, a friendly kitchen and pantry assistant.
 The user's current inventory:
 $inventorySummary
 Keep responses concise and practical.
