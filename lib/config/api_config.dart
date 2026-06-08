@@ -8,7 +8,7 @@ class ApiConfig {
   ApiConfig._();
 
   /// Your OpenRouter API key — replace this with the key from openrouter.ai/keys
-  static const String openRouterApiKey = 'fakeapikey';
+  static const String openRouterApiKey = 'notapikey';
 
   /// The model to use. These are all free on OpenRouter (append :free to the id):
   ///   google/gemma-4-31b-it:free     — Google Gemma 4 31B, great all-rounder

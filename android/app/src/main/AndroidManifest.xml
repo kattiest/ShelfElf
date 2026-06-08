@@ -42,15 +42,14 @@
                 <data android:scheme="pantrypal" android:host="list" />
             </intent-filter>
 
-            <!-- Web deep link: https://kattiest.github.io/ShelfElf/?list=... -->
+            <!-- Web deep link: https://sensational-taffy-72ba28.netlify.app/?list=... -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="kattiest.github.io"
-                    android:pathPrefix="/ShelfElf/" />
+                    android:host="sensational-taffy-72ba28.netlify.app" />
             </intent-filter>
         </activity>
 

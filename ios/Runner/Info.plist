@@ -42,7 +42,7 @@
 	<!-- Associated domain for https deep links -->
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>applinks:kattiest.github.io</string>
+		<string>applinks:sensational-taffy-72ba28.netlify.app</string>
 	</array>
 
 	<!-- Camera — required by mobile_scanner for barcode scanning -->
