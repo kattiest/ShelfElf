@@ -140,17 +140,25 @@ class _ItemCardState extends State<ItemCard> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  SizedBox(
-                    width: 48,
+                  // Large highlighted percentage badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: color.withAlpha(30),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: color.withAlpha(80)),
+                    ),
                     child: Text(
                       '$remaining%',
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: 16,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: SliderTheme(
                       data: SliderTheme.of(context).copyWith(

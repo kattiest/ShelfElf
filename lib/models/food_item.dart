@@ -1,16 +1,18 @@
 class FoodItem {
-  final int? id;
+  final int? id;              // SQLite local id
+  final String? firestoreId;  // Firestore document id (null when local-only)
   final String upc;
   final String product;
   final double packageSize;
   final double servingSize;
   final String sellByDate;
-  final int percentUsed; // 0-100, steps of 10
+  final int percentUsed;
   final String location;
-  final int orderingLevel; // percent threshold for reorder
+  final int orderingLevel;
 
   const FoodItem({
     this.id,
+    this.firestoreId,
     required this.upc,
     required this.product,
     required this.packageSize,
@@ -21,21 +23,17 @@ class FoodItem {
     required this.orderingLevel,
   });
 
-  /// Percent of item remaining (inverse of percentUsed)
   int get percentRemaining => 100 - percentUsed;
-
-  /// True when remaining stock is at or below the ordering threshold
   bool get isLow => percentRemaining <= orderingLevel;
 
-  /// Calculated servings remaining based on package size, serving size, and percent remaining
   double get servingsRemaining {
     if (servingSize <= 0) return 0;
-    final totalServings = packageSize / servingSize;
-    return totalServings * (percentRemaining / 100.0);
+    return (packageSize / servingSize) * (percentRemaining / 100.0);
   }
 
   FoodItem copyWith({
     int? id,
+    String? firestoreId,
     String? upc,
     String? product,
     double? packageSize,
@@ -47,6 +45,7 @@ class FoodItem {
   }) {
     return FoodItem(
       id: id ?? this.id,
+      firestoreId: firestoreId ?? this.firestoreId,
       upc: upc ?? this.upc,
       product: product ?? this.product,
       packageSize: packageSize ?? this.packageSize,
@@ -58,38 +57,61 @@ class FoodItem {
     );
   }
 
-  Map<String, dynamic> toMap() {
-    return {
-      if (id != null) 'id': id,
-      'upc': upc,
-      'product': product,
-      'package_size': packageSize,
-      'serving_size': servingSize,
-      'sell_by_date': sellByDate,
-      'percent_used': percentUsed,
-      'location': location,
-      'ordering_level': orderingLevel,
-    };
-  }
+  // ── SQLite ─────────────────────────────────────────────────────────────────
 
-  factory FoodItem.fromMap(Map<String, dynamic> map) {
-    return FoodItem(
-      id: map['id'] as int?,
-      upc: map['upc'] as String,
-      product: map['product'] as String,
-      packageSize: (map['package_size'] as num).toDouble(),
-      servingSize: (map['serving_size'] as num).toDouble(),
-      sellByDate: map['sell_by_date'] as String,
-      percentUsed: map['percent_used'] as int,
-      location: map['location'] as String,
-      orderingLevel: map['ordering_level'] as int,
-    );
-  }
+  Map<String, dynamic> toMap() => {
+        if (id != null) 'id': id,
+        'upc': upc,
+        'product': product,
+        'package_size': packageSize,
+        'serving_size': servingSize,
+        'sell_by_date': sellByDate,
+        'percent_used': percentUsed,
+        'location': location,
+        'ordering_level': orderingLevel,
+        if (firestoreId != null) 'firestore_id': firestoreId,
+      };
+
+  factory FoodItem.fromMap(Map<String, dynamic> map) => FoodItem(
+        id: map['id'] as int?,
+        firestoreId: map['firestore_id'] as String?,
+        upc: map['upc'] as String,
+        product: map['product'] as String,
+        packageSize: (map['package_size'] as num).toDouble(),
+        servingSize: (map['serving_size'] as num).toDouble(),
+        sellByDate: map['sell_by_date'] as String,
+        percentUsed: map['percent_used'] as int,
+        location: map['location'] as String,
+        orderingLevel: map['ordering_level'] as int,
+      );
+
+  // ── Firestore ──────────────────────────────────────────────────────────────
+
+  Map<String, dynamic> toFirestore() => {
+        'upc': upc,
+        'product': product,
+        'packageSize': packageSize,
+        'servingSize': servingSize,
+        'sellByDate': sellByDate,
+        'percentUsed': percentUsed,
+        'location': location,
+        'orderingLevel': orderingLevel,
+      };
+
+  factory FoodItem.fromFirestore(String docId, Map<String, dynamic> map) =>
+      FoodItem(
+        firestoreId: docId,
+        upc: map['upc'] as String? ?? '',
+        product: map['product'] as String? ?? '',
+        packageSize: (map['packageSize'] as num?)?.toDouble() ?? 0,
+        servingSize: (map['servingSize'] as num?)?.toDouble() ?? 0,
+        sellByDate: map['sellByDate'] as String? ?? '',
+        percentUsed: map['percentUsed'] as int? ?? 0,
+        location: map['location'] as String? ?? 'Pantry',
+        orderingLevel: map['orderingLevel'] as int? ?? 20,
+      );
 
   @override
-  String toString() {
-    return 'FoodItem(id: $id, upc: $upc, product: $product, '
-        'percentRemaining: $percentRemaining%, location: $location, '
-        'isLow: $isLow)';
-  }
+  String toString() =>
+      'FoodItem($product, ${percentRemaining}% left, $location)';
 }

@@ -23,6 +23,7 @@ android/.gradle/
 android/local.properties
 android/key.properties
 android/app/src/main/java/io/flutter/plugins/
+android/app/google-services.json
 
 # ── iOS — exclude generated/local-only files, keep everything else ───────────
 

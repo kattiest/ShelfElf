@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/food_item.dart';
 import '../providers/inventory_provider.dart';
-
 class AddItemScreen extends StatefulWidget {
   /// Pre-fill from barcode scan
   final String? scannedUpc;
@@ -64,6 +63,12 @@ class _AddItemScreenState extends State<AddItemScreen> {
     } else {
       _upc = widget.scannedUpc ?? '';
       _productController.text = widget.scannedProductName ?? '';
+      // Auto-suggest location based on product name
+      if (_productController.text.isNotEmpty) {
+        _location = context
+            .read<InventoryProvider>()
+            .suggestLocation(_productController.text);
+      }
     }
   }
 

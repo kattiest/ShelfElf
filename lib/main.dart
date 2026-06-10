@@ -2,16 +2,23 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'models/food_item.dart';
 import 'providers/inventory_provider.dart';
+import 'providers/sync_provider.dart';
 import 'screens/inventory_screen.dart';
 import 'screens/shopping_list_screen.dart';
 import 'screens/ai_chat_screen.dart';
 import 'screens/meal_plan_screen.dart';
 import 'services/share_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // Firebase not configured yet — runs in local-only mode
+  }
   runApp(const ShelfElfApp());
 }
 
@@ -20,8 +27,17 @@ class ShelfElfApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => InventoryProvider(),
+    // SyncProvider must come first since InventoryProvider depends on it
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProxyProvider<SyncProvider, InventoryProvider>(
+          create: (ctx) =>
+              InventoryProvider(ctx.read<SyncProvider>()),
+          update: (ctx, sync, prev) =>
+              prev ?? InventoryProvider(sync),
+        ),
+      ],
       child: MaterialApp(
         title: 'Shelf Elf',
         debugShowCheckedModeBanner: false,
@@ -36,7 +52,6 @@ class ShelfElfApp extends StatelessWidget {
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     const seedColor = Color(0xFF4CAF50);
-
     final colorScheme = ColorScheme.fromSeed(
       seedColor: seedColor,
       brightness: brightness,
@@ -64,9 +79,7 @@ class ShelfElfApp extends StatelessWidget {
         elevation: 4,
       ),
       inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         filled: true,
@@ -76,29 +89,26 @@ class ShelfElfApp extends StatelessWidget {
       ),
       cardTheme: CardThemeData(
         elevation: 2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         surfaceTintColor: colorScheme.surfaceTint,
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: colorScheme.primary,
         thumbColor: colorScheme.primary,
-        overlayColor: colorScheme.primary.withOpacity(0.15),
-        inactiveTrackColor: colorScheme.primary.withOpacity(0.25),
+        overlayColor: colorScheme.primary.withAlpha(38),
+        inactiveTrackColor: colorScheme.primary.withAlpha(64),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
+              borderRadius: BorderRadius.circular(10)),
         ),
       ),
     );
   }
 }
 
-// ── App shell with bottom nav + deep link handling ────────────────────────────
+// ── App shell ─────────────────────────────────────────────────────────────────
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -111,17 +121,14 @@ class _AppShellState extends State<AppShell> {
   int _currentIndex = 0;
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSub;
-
-  // Keep pages alive when switching tabs using lazy initialization
-  late final List<Widget> _pages = [
-    const InventoryScreen(),
-    const ShoppingListScreen(),
-    const MealPlanScreen(),
-    const AiChatScreen(),
-  ];
-
-  // Track which tabs have been visited so unvisited ones aren't built yet
   final Set<int> _visitedTabs = {0};
+
+  late final List<Widget> _pages = const [
+    InventoryScreen(),
+    ShoppingListScreen(),
+    MealPlanScreen(),
+    AiChatScreen(),
+  ];
 
   @override
   void initState() {
@@ -131,16 +138,11 @@ class _AppShellState extends State<AppShell> {
 
   Future<void> _initDeepLinks() async {
     _appLinks = AppLinks();
-
-    // Handle link that cold-started the app
     final initialUri = await _appLinks.getInitialLink();
     if (initialUri != null) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _handleLink(initialUri),
-      );
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _handleLink(initialUri));
     }
-
-    // Handle links while app is already running
     _linkSub = _appLinks.uriLinkStream.listen(
       _handleLink,
       onError: (e) => debugPrint('Deep link error: $e'),
@@ -148,20 +150,14 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _handleLink(Uri uri) {
-    // Handle both https web links and pantrypal:// direct deep links
     final items = ShareService.instance.decodeUrl(uri.toString());
     if (items == null || items.isEmpty) return;
-
-    // Switch to shopping list tab
     setState(() {
       _currentIndex = 1;
       _visitedTabs.add(1);
     });
-
-    // Show import dialog
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showImportDialog(context, items);
+      if (mounted) showImportDialog(context, items);
     });
   }
 
@@ -179,24 +175,19 @@ class _AppShellState extends State<AppShell> {
       body: IndexedStack(
         index: _currentIndex,
         children: _pages.asMap().entries.map((e) {
-          // Don't build tabs that haven't been visited yet
-          if (!_visitedTabs.contains(e.key)) {
-            return const SizedBox.shrink();
-          }
+          if (!_visitedTabs.contains(e.key)) return const SizedBox.shrink();
           return e.value;
         }).toList(),
       ),
       bottomNavigationBar: Consumer<InventoryProvider>(
         builder: (context, provider, _) {
           final lowCount = provider.shoppingList.length;
-
           return NavigationBar(
             selectedIndex: _currentIndex,
-            onDestinationSelected: (i) =>
-                setState(() {
-                  _currentIndex = i;
-                  _visitedTabs.add(i);
-                }),
+            onDestinationSelected: (i) => setState(() {
+              _currentIndex = i;
+              _visitedTabs.add(i);
+            }),
             backgroundColor: cs.surface,
             indicatorColor: cs.primaryContainer,
             destinations: [
@@ -236,21 +227,19 @@ class _AppShellState extends State<AppShell> {
   }
 }
 
-/// Shows a dialog listing the shared items and lets the user import them.
+// ── Shared list import dialog ─────────────────────────────────────────────────
+
 Future<void> showImportDialog(
     BuildContext context, List<SharedItem> items) async {
   final provider = context.read<InventoryProvider>();
-
   return showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.share_outlined, size: 20),
-          SizedBox(width: 8),
-          Text('Shared Shopping List'),
-        ],
-      ),
+      title: const Row(children: [
+        Icon(Icons.share_outlined, size: 20),
+        SizedBox(width: 8),
+        Text('Shared Shopping List'),
+      ]),
       content: SizedBox(
         width: double.maxFinite,
         child: Column(
@@ -273,25 +262,19 @@ Future<void> showImportDialog(
                     padding: const EdgeInsets.symmetric(vertical: 3),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.shopping_basket_outlined,
-                          size: 16,
-                          color: Colors.green[600],
-                        ),
+                        Icon(Icons.shopping_basket_outlined,
+                            size: 16, color: Colors.green[600]),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            item.product,
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
+                          child: Text(item.product,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w500)),
                         ),
                         if (item.location.isNotEmpty &&
                             item.location != 'Shopping List')
-                          Text(
-                            item.location,
-                            style: const TextStyle(
-                                color: Colors.grey, fontSize: 12),
-                          ),
+                          Text(item.location,
+                              style: const TextStyle(
+                                  color: Colors.grey, fontSize: 12)),
                       ],
                     ),
                   );
@@ -319,16 +302,14 @@ Future<void> showImportDialog(
   );
 }
 
-void _importItems(
-    InventoryProvider provider, List<SharedItem> items, BuildContext context) {
+void _importItems(InventoryProvider provider, List<SharedItem> items,
+    BuildContext context) {
   int added = 0;
   for (final shared in items) {
-    // Skip if already in inventory by name
-    final exists = provider.items
-        .any((i) => i.product.toLowerCase() == shared.product.toLowerCase());
+    final exists = provider.items.any(
+        (i) => i.product.toLowerCase() == shared.product.toLowerCase());
     if (exists) continue;
-
-    final newItem = FoodItem(
+    provider.addItem(FoodItem(
       upc: '',
       product: shared.product,
       packageSize: 0,
@@ -337,23 +318,18 @@ void _importItems(
       percentUsed: 100,
       location: shared.location.isNotEmpty ? shared.location : 'Shopping List',
       orderingLevel: 100,
-    );
-    provider.addItem(newItem);
+    ));
     added++;
   }
-
   final skipped = items.length - added;
   final msg = added == 0
       ? 'All items already in your pantry.'
       : skipped > 0
           ? 'Added $added item${added == 1 ? '' : 's'} ($skipped already existed).'
           : 'Added $added item${added == 1 ? '' : 's'} to your list!';
-
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(msg),
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 3),
-    ),
-  );
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(msg),
+    behavior: SnackBarBehavior.floating,
+    duration: const Duration(seconds: 3),
+  ));
 }

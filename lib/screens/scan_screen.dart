@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:provider/provider.dart';
+import '../models/food_item.dart';
+import '../providers/inventory_provider.dart';
 import '../services/barcode_lookup_service.dart';
 import 'add_item_screen.dart';
 
@@ -36,7 +39,6 @@ class _ScanScreenState extends State<ScanScreen> {
 
     if (!mounted) return;
 
-    // Show loading indicator while looking up product
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -49,13 +51,18 @@ class _ScanScreenState extends State<ScanScreen> {
     if (!mounted) return;
     Navigator.of(context).pop(); // close loading dialog
 
-    _showResultBottomSheet(upc, productName);
+    // Check if this UPC already exists in the pantry
+    final existing = context.read<InventoryProvider>().findByUpc(upc);
+    _showResultBottomSheet(upc, productName, existing);
   }
 
-  void _showResultBottomSheet(String upc, String? productName) {
+  void _showResultBottomSheet(
+      String upc, String? productName, FoodItem? existing) {
     final displayName = (productName != null && productName.isNotEmpty)
         ? productName
-        : 'Unknown Product';
+        : (existing?.product ?? 'Unknown Product');
+
+    final isExisting = existing != null;
 
     showModalBottomSheet(
       context: context,
@@ -70,6 +77,7 @@ class _ScanScreenState extends State<ScanScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Handle bar
               Center(
                 child: Container(
                   width: 40,
@@ -81,60 +89,152 @@ class _ScanScreenState extends State<ScanScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Barcode Scanned',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              _ResultRow(label: 'Product', value: displayName),
-              const SizedBox(height: 6),
-              _ResultRow(label: 'UPC', value: upc),
-              const SizedBox(height: 24),
+
+              // Title
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        setState(() => _isProcessing = false);
-                        _controller.start();
-                      },
-                      child: const Text('Scan Again'),
-                    ),
+                  Icon(
+                    isExisting
+                        ? Icons.inventory_2_outlined
+                        : Icons.barcode_reader,
+                    size: 20,
+                    color: Theme.of(ctx).colorScheme.primary,
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AddItemScreen(
-                              scannedUpc: upc,
-                              scannedProductName: displayName == 'Unknown Product'
-                                  ? ''
-                                  : displayName,
-                            ),
-                          ),
-                        );
-                      },
-                      child: const Text('Add to Pantry'),
-                    ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isExisting ? 'Already in Pantry' : 'Barcode Scanned',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+
+              _ResultRow(label: 'Product', value: displayName),
+              const SizedBox(height: 6),
+              _ResultRow(label: 'UPC', value: upc),
+
+              // Show current level if item exists
+              if (isExisting) ...[
+                const SizedBox(height: 6),
+                _ResultRow(
+                  label: 'Currently',
+                  value:
+                      '${existing.percentRemaining}% remaining — ${existing.location}',
+                ),
+              ],
+
+              const SizedBox(height: 24),
+
+              if (isExisting) ...[
+                // Existing item — offer restock or edit
+                FilledButton.icon(
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Restock to Full'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _restockItem(existing);
+                  },
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          setState(() => _isProcessing = false);
+                          _controller.start();
+                        },
+                        child: const Text('Scan Again'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  AddItemScreen(existingItem: existing),
+                            ),
+                          );
+                        },
+                        child: const Text('Edit Item'),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                // New item — add to pantry
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          setState(() => _isProcessing = false);
+                          _controller.start();
+                        },
+                        child: const Text('Scan Again'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => AddItemScreen(
+                                scannedUpc: upc,
+                                scannedProductName:
+                                    displayName == 'Unknown Product'
+                                        ? ''
+                                        : displayName,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Add to Pantry'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ),
     ).whenComplete(() {
-      // If bottom sheet dismissed without action, resume scanning
       if (_isProcessing && mounted) {
         setState(() => _isProcessing = false);
         _controller.start();
       }
     });
+  }
+
+  Future<void> _restockItem(FoodItem item) async {
+    final provider = context.read<InventoryProvider>();
+    await provider.restockItem(item);
+
+    if (!mounted) return;
+
+    // Show confirmation and resume scanning
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('${item.product} restocked to full'),
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ));
+
+    setState(() => _isProcessing = false);
+    _controller.start();
   }
 
   @override
@@ -167,7 +267,6 @@ class _ScanScreenState extends State<ScanScreen> {
             controller: _controller,
             onDetect: _onBarcodeDetected,
           ),
-          // Scan frame overlay
           Center(
             child: Container(
               width: 260,
@@ -178,11 +277,11 @@ class _ScanScreenState extends State<ScanScreen> {
               ),
             ),
           ),
-          Positioned(
+          const Positioned(
             bottom: 40,
             left: 0,
             right: 0,
-            child: const Text(
+            child: Text(
               'Align barcode within the frame',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70, fontSize: 14),
@@ -206,7 +305,7 @@ class _ResultRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 72,
+          width: 80,
           child: Text(
             '$label:',
             style: const TextStyle(

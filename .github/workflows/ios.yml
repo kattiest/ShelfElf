@@ -24,37 +24,50 @@ jobs:
       - name: Install xcpretty
         run: gem install xcpretty
 
-      - name: Generate Flutter engine files
-        run: flutter build ios --simulator
-        # Build for simulator first — no signing needed at all,
-        # this generates the Flutter.framework and plugin artifacts
-        # that xcodebuild needs without touching device signing.
+      - name: Build Flutter iOS release (no codesign)
+        run: flutter build ios --release --no-codesign
+        env:
+          CODE_SIGN_IDENTITY: ""
+          CODE_SIGNING_REQUIRED: "NO"
+          CODE_SIGNING_ALLOWED: "NO"
+          DEVELOPMENT_TEAM: ""
 
-      - name: Archive with xcodebuild (unsigned device build)
+      - name: Archive with xcodebuild
         run: |
           xcodebuild \
             -workspace ios/Runner.xcworkspace \
             -scheme Runner \
             -configuration Release \
             -destination generic/platform=iOS \
-            -archivePath $RUNNER_TEMP/ShelfElf.xcarchive \
+            -archivePath "$RUNNER_TEMP/ShelfElf.xcarchive" \
             archive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             DEVELOPMENT_TEAM="" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
             | xcpretty --color
 
-      - name: Package unsigned IPA
+      - name: Verify archive exists
         run: |
-          mkdir -p Payload
-          cp -r "$RUNNER_TEMP/ShelfElf.xcarchive/Products/Applications/Runner.app" Payload/
-          zip -r ShelfElf.ipa Payload/
+          ls -la "$RUNNER_TEMP/ShelfElf.xcarchive/Products/Applications/"
+
+      - name: Package IPA (correct structure)
+        run: |
+          cd "$RUNNER_TEMP"
+          mkdir -p IPA/Payload
+          cp -r "ShelfElf.xcarchive/Products/Applications/Runner.app" "IPA/Payload/"
+          cd IPA
+          # Use ditto which preserves symlinks and resource forks correctly
+          ditto -c -k --sequesterRsrc --keepParent "Payload" "$RUNNER_TEMP/ShelfElf.ipa"
+
+      - name: Verify IPA
+        run: |
+          ls -lh "$RUNNER_TEMP/ShelfElf.ipa"
+          unzip -l "$RUNNER_TEMP/ShelfElf.ipa" | head -20
 
       - uses: actions/upload-artifact@v4
         with:
           name: ShelfElf-ios
-          path: ShelfElf.ipa
+          path: ${{ runner.temp }}/ShelfElf.ipa
           retention-days: 30
