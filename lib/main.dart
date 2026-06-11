@@ -134,6 +134,14 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _initDeepLinks();
+    // Restore cloud sync if user was previously signed in
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final sync = context.read<SyncProvider>();
+      await sync.initSync();
+      if (mounted) {
+        await context.read<InventoryProvider>().loadItems();
+      }
+    });
   }
 
   Future<void> _initDeepLinks() async {

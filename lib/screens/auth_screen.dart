@@ -54,7 +54,6 @@ class _AuthScreenState extends State<AuthScreen> {
             _passwordCtrl.text,
             displayName: _nameCtrl.text.trim(),
           );
-          // Auto-create a pantry for new users
           await sync.createPantry(_nameCtrl.text.trim().isNotEmpty
               ? _nameCtrl.text.trim()
               : 'My Pantry');
