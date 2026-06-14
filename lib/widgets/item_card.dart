@@ -2,44 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/food_item.dart';
 
-class ItemCard extends StatefulWidget {
+class ItemCard extends StatelessWidget {
   final FoodItem item;
-  final void Function(FoodItem updated) onPercentChanged;
+  final void Function(FoodItem updated) onQuantityChanged;
   final VoidCallback onDelete;
   final VoidCallback onTap;
 
   const ItemCard({
     super.key,
     required this.item,
-    required this.onPercentChanged,
+    required this.onQuantityChanged,
     required this.onDelete,
     required this.onTap,
   });
 
-  @override
-  State<ItemCard> createState() => _ItemCardState();
-}
-
-class _ItemCardState extends State<ItemCard> {
-  late double _sliderValue;
-
-  @override
-  void initState() {
-    super.initState();
-    _sliderValue = widget.item.percentUsed.toDouble();
-  }
-
-  @override
-  void didUpdateWidget(ItemCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.item.percentUsed != widget.item.percentUsed) {
-      _sliderValue = widget.item.percentUsed.toDouble();
-    }
-  }
-
-  Color _indicatorColor(int percentRemaining) {
-    if (percentRemaining <= 20) return Colors.red;
-    if (percentRemaining <= 30) return Colors.orange;
+  Color _indicatorColor(int remaining, int total) {
+    if (total == 0) return Colors.grey;
+    final ratio = remaining / total;
+    if (ratio <= 0.25) return Colors.red;
+    if (ratio <= 0.5) return Colors.orange;
     return Colors.green;
   }
 
@@ -49,34 +30,32 @@ class _ItemCardState extends State<ItemCard> {
       final date = DateFormat('yyyy-MM-dd').parse(dateStr);
       final days = date.difference(DateTime.now()).inDays;
       return days >= 0 && days <= 7;
-    } catch (_) {
-      return false;
-    }
+    } catch (_) { return false; }
   }
 
   bool _isExpired(String dateStr) {
     if (dateStr.isEmpty) return false;
     try {
-      final date = DateFormat('yyyy-MM-dd').parse(dateStr);
-      return date.isBefore(DateTime.now());
-    } catch (_) {
-      return false;
-    }
+      return DateFormat('yyyy-MM-dd')
+          .parse(dateStr)
+          .isBefore(DateTime.now());
+    } catch (_) { return false; }
   }
 
   int _daysUntilExpiry(String dateStr) {
     try {
-      final date = DateFormat('yyyy-MM-dd').parse(dateStr);
-      return date.difference(DateTime.now()).inDays;
-    } catch (_) {
-      return 0;
-    }
+      return DateFormat('yyyy-MM-dd')
+          .parse(dateStr)
+          .difference(DateTime.now())
+          .inDays;
+    } catch (_) { return 0; }
   }
 
   @override
   Widget build(BuildContext context) {
-    final remaining = widget.item.percentRemaining;
-    final color = _indicatorColor(remaining);
+    final cs = Theme.of(context).colorScheme;
+    final remaining = item.quantityRemaining;
+    final color = _indicatorColor(remaining, item.quantity);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -84,155 +63,127 @@ class _ItemCardState extends State<ItemCard> {
       elevation: 2,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: widget.onTap,
+        onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Top row: dot + name + delete ─────────────────────────────
               Row(
                 children: [
-                  // Color indicator dot
                   Container(
                     width: 12,
                     height: 12,
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
+                        color: color, shape: BoxShape.circle),
                   ),
                   Expanded(
                     child: Text(
-                      widget.item.product,
+                      item.product,
                       style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
+                          fontSize: 16, fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    tooltip: 'Delete item',
                     onPressed: () => _confirmDelete(context),
+                    visualDensity: VisualDensity.compact,
                   ),
                 ],
               ),
-              const SizedBox(height: 2),
+
+              // ── Location + expiry ─────────────────────────────────────────
               Row(
                 children: [
                   _InfoChip(
                     icon: Icons.place_outlined,
-                    label: widget.item.location,
+                    label: item.location,
                   ),
                   const SizedBox(width: 8),
                   _InfoChip(
                     icon: Icons.calendar_today_outlined,
-                    label: widget.item.sellByDate.isNotEmpty
-                        ? widget.item.sellByDate
+                    label: item.sellByDate.isNotEmpty
+                        ? item.sellByDate
                         : 'No date',
-                    warning: _isExpiringSoon(widget.item.sellByDate),
-                    expired: _isExpired(widget.item.sellByDate),
+                    warning: _isExpiringSoon(item.sellByDate),
+                    expired: _isExpired(item.sellByDate),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
+
+              // ── Quantity row ──────────────────────────────────────────────
               Row(
                 children: [
-                  // Large highlighted percentage badge
+                  // Large highlighted qty remaining
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                        horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       color: color.withAlpha(30),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: color.withAlpha(80)),
                     ),
                     child: Text(
-                      '$remaining%',
+                      '$remaining',
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: 22,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        activeTrackColor: color,
-                        thumbColor: color,
-                        inactiveTrackColor: color.withOpacity(0.25),
-                        overlayColor: color.withOpacity(0.15),
-                        trackHeight: 4,
-                      ),
-                      child: Slider(
-                        value: _sliderValue,
-                        min: 0,
-                        max: 100,
-                        divisions: 10,
-                        label: '${(100 - _sliderValue).round()}% left',
-                        onChanged: (value) {
-                          setState(() => _sliderValue = value);
-                        },
-                        onChangeEnd: (value) {
-                          final snapped = (value / 10).round() * 10;
-                          final updated = widget.item.copyWith(
-                            percentUsed: snapped,
-                          );
-                          widget.onPercentChanged(updated);
-                        },
-                      ),
-                    ),
+                  Text(
+                    'of ${item.quantity}',
+                    style: TextStyle(
+                        color: cs.onSurfaceVariant, fontSize: 14),
+                  ),
+                  const Spacer(),
+
+                  // − button
+                  _SmallQtyBtn(
+                    icon: Icons.remove,
+                    color: color,
+                    enabled: item.quantityUsed < item.quantity,
+                    onTap: () => onQuantityChanged(
+                        item.copyWith(quantityUsed: item.quantityUsed + 1)),
+                  ),
+                  const SizedBox(width: 8),
+                  // + button (restock)
+                  _SmallQtyBtn(
+                    icon: Icons.add,
+                    color: Colors.green,
+                    enabled: item.quantityUsed > 0,
+                    onTap: () => onQuantityChanged(
+                        item.copyWith(quantityUsed: item.quantityUsed - 1)),
                   ),
                 ],
               ),
-              if (widget.item.isLow)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.shopping_cart_outlined,
-                          size: 14, color: Colors.orange),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Low — added to shopping list',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.orange[700],
-                        ),
-                      ),
-                    ],
-                  ),
+
+              // ── Status badges ─────────────────────────────────────────────
+              if (item.isLow)
+                _StatusBadge(
+                  icon: Icons.shopping_cart_outlined,
+                  text: 'Low — on shopping list',
+                  color: Colors.orange[700]!,
                 ),
-              if (_isExpired(widget.item.sellByDate))
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 4),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_rounded, size: 14, color: Colors.red),
-                      const SizedBox(width: 4),
-                      const Text('Expired!',
-                          style: TextStyle(fontSize: 12, color: Colors.red,
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+              if (_isExpired(item.sellByDate))
+                const _StatusBadge(
+                  icon: Icons.warning_rounded,
+                  text: 'Expired!',
+                  color: Colors.red,
+                  bold: true,
                 )
-              else if (_isExpiringSoon(widget.item.sellByDate))
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, bottom: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.schedule, size: 14, color: Colors.orange[700]),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Expires soon — ${_daysUntilExpiry(widget.item.sellByDate)} days left',
-                        style: TextStyle(fontSize: 12, color: Colors.orange[700]),
-                      ),
-                    ],
-                  ),
+              else if (_isExpiringSoon(item.sellByDate))
+                _StatusBadge(
+                  icon: Icons.schedule,
+                  text:
+                      'Expires in ${_daysUntilExpiry(item.sellByDate)} days',
+                  color: Colors.orange[700]!,
                 ),
             ],
           ),
@@ -246,26 +197,60 @@ class _ItemCardState extends State<ItemCard> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete item?'),
-        content: Text(
-            'Remove "${widget.item.product}" from your inventory?'),
+        content: Text('Remove "${item.product}" from your pantry?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete')),
         ],
       ),
     );
-    if (confirmed == true) {
-      widget.onDelete();
-    }
+    if (confirmed == true) onDelete();
   }
 }
+
+// ── Small inline qty button ───────────────────────────────────────────────────
+
+class _SmallQtyBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _SmallQtyBtn({
+    required this.icon,
+    required this.color,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: enabled ? color.withAlpha(20) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: enabled ? color.withAlpha(80) : Colors.grey.shade300),
+        ),
+        child: Icon(icon,
+            size: 18,
+            color: enabled ? color : Colors.grey.shade400),
+      ),
+    );
+  }
+}
+
+// ── Info chip ─────────────────────────────────────────────────────────────────
 
 class _InfoChip extends StatelessWidget {
   final IconData icon;
@@ -287,21 +272,55 @@ class _InfoChip extends StatelessWidget {
         : warning
             ? Colors.orange[700]!
             : Colors.grey[600]!;
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 12, color: color),
         const SizedBox(width: 3),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: color,
-            fontWeight: (warning || expired) ? FontWeight.w600 : FontWeight.normal,
-          ),
-        ),
+        Text(label,
+            style: TextStyle(
+              fontSize: 12,
+              color: color,
+              fontWeight: (warning || expired)
+                  ? FontWeight.w600
+                  : FontWeight.normal,
+            )),
       ],
+    );
+  }
+}
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+class _StatusBadge extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Color color;
+  final bool bold;
+
+  const _StatusBadge({
+    required this.icon,
+    required this.text,
+    required this.color,
+    this.bold = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(text,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: color,
+                  fontWeight:
+                      bold ? FontWeight.bold : FontWeight.normal)),
+        ],
+      ),
     );
   }
 }

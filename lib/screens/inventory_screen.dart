@@ -149,7 +149,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               final item = items[index];
               return ItemCard(
                 item: item,
-                onPercentChanged: (updated) =>
+                onQuantityChanged: (updated) =>
                     provider.updateItem(updated),
                 onDelete: () =>
                     provider.deleteItem(item.id, firestoreId: item.firestoreId),

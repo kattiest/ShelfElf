@@ -20,8 +20,8 @@ class SortOption {
         return direction == SortDirection.asc ? 'A → Z' : 'Z → A';
       case SortField.percentRemaining:
         return direction == SortDirection.asc
-            ? 'Least remaining $dir'
-            : 'Most remaining $dir';
+            ? 'Least remaining ↑'
+            : 'Most remaining ↓';
       case SortField.expiryDate:
         return direction == SortDirection.asc
             ? 'Expiring soon $dir'

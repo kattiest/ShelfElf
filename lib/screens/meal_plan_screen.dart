@@ -119,12 +119,11 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
       provider.addItem(FoodItem(
         upc: '',
         product: name,
-        packageSize: 0,
-        servingSize: 0,
+        quantity: 1,
+        quantityUsed: 1,
         sellByDate: '',
-        percentUsed: 100,
         location: 'Shopping List',
-        orderingLevel: 100,
+        alertAt: 1,
       ));
       added++;
     }
@@ -658,7 +657,7 @@ class _PlanDinnerDialogState extends State<_PlanDinnerDialog> {
                             child: CircularProgressIndicator(
                                 strokeWidth: 2, color: Colors.white))
                         : const Icon(Icons.auto_awesome, size: 18),
-                    tooltip: 'Check ingredients with AI',
+                    tooltip: 'Ask the Elf for ingredients',
                     onPressed: (_isLookingUp ||
                             _controller.text.trim().isEmpty)
                         ? null

@@ -53,7 +53,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
     // Welcome message
     _messages.add(const _ChatMessage(
       role: _MessageRole.assistant,
-      text: "Hi! I'm Shelf Elf AI 🧝\n\nTell me what you want to cook — "
+      text: "Hi! I'm the Elf 🧝\n\nTell me what you want to cook — "
           "tap the mic or type below — and I'll check your pantry and build "
           "your shopping list.",
     ));
@@ -192,12 +192,11 @@ class _AiChatScreenState extends State<AiChatScreen> {
     final newItem = FoodItem(
       upc: '',
       product: ingredient.name,
-      packageSize: 0,
-      servingSize: 0,
+      quantity: 1,
+      quantityUsed: 1, // need to buy — 0 remaining triggers shopping list
       sellByDate: '',
-      percentUsed: 100, // mark as fully used / need to buy
       location: 'Shopping List',
-      orderingLevel: 100, // always show in shopping list
+      alertAt: 1,
     );
     provider.addItem(newItem);
 
@@ -220,7 +219,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ask Shelf Elf AI'),
+        title: const Text('Ask the Elf'),
         actions: [
           if (_messages.length > 1)
             IconButton(

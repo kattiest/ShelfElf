@@ -38,7 +38,7 @@ class InventoryProvider extends ChangeNotifier {
         case SortField.name:
           cmp = a.product.toLowerCase().compareTo(b.product.toLowerCase());
         case SortField.percentRemaining:
-          cmp = a.percentRemaining.compareTo(b.percentRemaining);
+          cmp = a.quantityRemaining.compareTo(b.quantityRemaining);
         case SortField.expiryDate:
           final aDate = a.sellByDate.isEmpty ? '9999-99-99' : a.sellByDate;
           final bDate = b.sellByDate.isEmpty ? '9999-99-99' : b.sellByDate;
@@ -142,7 +142,7 @@ class InventoryProvider extends ChangeNotifier {
   }
 
   Future<void> restockItem(FoodItem item) async {
-    await updateItem(item.copyWith(percentUsed: 0));
+    await updateItem(item);
   }
 
   // ── Lookup ─────────────────────────────────────────────────────────────────

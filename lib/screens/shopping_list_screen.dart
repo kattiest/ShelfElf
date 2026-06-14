@@ -15,9 +15,9 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
   // Local checked state — does not affect inventory
   final Set<int> _checkedIds = {};
 
-  Color _remainingColor(int percentRemaining) {
-    if (percentRemaining <= 10) return Colors.red;
-    if (percentRemaining <= 20) return Colors.orange;
+  Color _remainingColor(FoodItem item) {
+    if (item.quantityRemaining == 0) return Colors.red;
+    if (item.quantityRemaining <= 1) return Colors.orange;
     return Colors.amber;
   }
 
@@ -115,8 +115,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
                     return _ShoppingItemTile(
                       item: item,
                       isChecked: isChecked,
-                      remainingColor:
-                          _remainingColor(item.percentRemaining),
+                      remainingColor: _remainingColor(item),
                       onToggle: (checked) {
                         setState(() {
                           if (checked == true) {
@@ -184,7 +183,7 @@ class _ShoppingItemTile extends StatelessWidget {
                 ),
               ),
               Text(
-                '${item.percentRemaining}% left',
+                '${item.quantityRemaining} of ${item.quantity} left',
                 style: TextStyle(
                   color: remainingColor,
                   fontWeight: FontWeight.w500,

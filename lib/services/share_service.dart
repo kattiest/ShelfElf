@@ -26,7 +26,8 @@ class ShareService {
         .map((i) => {
               'p': i.product,
               'l': i.location,
-              'r': i.percentRemaining,
+              'r': i.quantityRemaining,
+              'q': i.quantity,
             })
         .toList();
 

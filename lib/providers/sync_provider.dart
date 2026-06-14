@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../models/food_item.dart';
 import '../services/auth_service.dart';
@@ -6,9 +8,9 @@ import '../services/database_service.dart';
 import '../services/firestore_service.dart';
 import '../services/location_memory_service.dart';
 
-/// Manages whether the app is in local-only or cloud-sync mode.
-/// When signed in, all writes go to Firestore and stream back via listener.
-/// When offline/local, writes go to SQLite only.
+/// Callback used to tell InventoryProvider to reload when sync state changes.
+typedef OnSyncReady = Future<void> Function();
+
 class SyncProvider extends ChangeNotifier {
   final AuthService _auth = AuthService.instance;
   final FirestoreService _firestore = FirestoreService.instance;
@@ -16,47 +18,112 @@ class SyncProvider extends ChangeNotifier {
 
   String? _pantryId;
   bool _isCloudMode = false;
-  StreamSubscription<List<FoodItem>>? _itemsSub;
+  bool _isInitializing = false;
+  StreamSubscription<User?>? _authSub;
+
+  /// Set this so SyncProvider can trigger InventoryProvider to reload
+  /// when the pantry/sync state changes (login, join, create).
+  OnSyncReady? onSyncReady;
 
   String? get pantryId => _pantryId;
   bool get isCloudMode => _isCloudMode;
+  bool get isInitializing => _isInitializing;
   String? get uid => _auth.uid;
   bool get isSignedIn => _auth.isSignedIn;
 
-  /// Call after auth state changes to set up cloud sync.
-  Future<void> initSync() async {
+  SyncProvider() {
+    // Auto-respond to Firebase auth state changes
+    _authSub =
+        FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
+  }
+
+  Future<void> _onAuthChanged(User? user) async {
+    if (user == null) {
+      await _disableCloud();
+    } else {
+      await _doInitSync();
+    }
+    onSyncReady?.call();
+  }
+
+  Future<void> _doInitSync() async {
     if (!_auth.isSignedIn) {
       await _disableCloud();
       return;
     }
 
-    final pid = await _firestore.getPantryId(_auth.uid!);
-    if (pid == null) {
-      // Signed in but no pantry yet — still local
-      await _disableCloud();
-      return;
-    }
-
-    _pantryId = pid;
-    _isCloudMode = true;
+    _isInitializing = true;
     notifyListeners();
+
+    try {
+      final pid = await _firestore.getPantryId(_auth.uid!);
+      if (pid == null) {
+        await _disableCloud();
+      } else {
+        _pantryId = pid;
+        _isCloudMode = true;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('SyncProvider._doInitSync error: $e');
+      await _disableCloud();
+    } finally {
+      _isInitializing = false;
+      notifyListeners();
+    }
   }
 
-  /// Create a new pantry and enable cloud sync.
+  /// Manually trigger sync init — call after login/register.
+  Future<void> initSync() => _doInitSync();
+
   Future<void> createPantry(String displayName) async {
     if (!_auth.isSignedIn) return;
-    _pantryId = await _firestore.createPantry(_auth.uid!, displayName);
-    _isCloudMode = true;
+
+    _isInitializing = true;
     notifyListeners();
+
+    try {
+      final pid =
+          await _firestore.createPantry(_auth.uid!, displayName);
+      _pantryId = pid;
+      _isCloudMode = true;
+      notifyListeners();
+      onSyncReady?.call();
+    } catch (e) {
+      rethrow;
+    } finally {
+      _isInitializing = false;
+      notifyListeners();
+    }
   }
 
-  /// Join an existing pantry by ID and enable cloud sync.
   Future<void> joinPantry(String pantryId, String displayName) async {
     if (!_auth.isSignedIn) return;
-    await _firestore.joinPantry(_auth.uid!, pantryId, displayName);
-    _pantryId = pantryId;
-    _isCloudMode = true;
+
+    _isInitializing = true;
     notifyListeners();
+
+    try {
+      // Verify pantry exists first
+      final pantryDoc = await FirebaseFirestore.instance
+          .collection('pantries')
+          .doc(pantryId.trim())
+          .get();
+      if (!pantryDoc.exists) {
+        throw Exception('Pantry not found. Double-check the invite code.');
+      }
+
+      await _firestore.joinPantry(_auth.uid!, pantryId.trim(), displayName);
+      _pantryId = pantryId.trim();
+      _isCloudMode = true;
+      notifyListeners();
+      onSyncReady?.call();
+    } catch (e) {
+      rethrow;
+    } finally {
+      _isInitializing = false;
+      notifyListeners();
+    }
   }
 
   Future<List<Map<String, dynamic>>> getMembers() async {
@@ -67,23 +134,18 @@ class SyncProvider extends ChangeNotifier {
   Future<void> _disableCloud() async {
     _pantryId = null;
     _isCloudMode = false;
-    _itemsSub?.cancel();
-    _itemsSub = null;
     notifyListeners();
   }
 
-  /// Get a real-time stream of items — Firestore if cloud, null if local.
   Stream<List<FoodItem>>? itemsStream() {
     if (!_isCloudMode || _pantryId == null) return null;
     return _firestore.itemsStream(_pantryId!);
   }
 
-  // ── Write operations — route to Firestore or SQLite ───────────────────────
+  // ── Write operations ───────────────────────────────────────────────────────
 
   Future<FoodItem> addItem(FoodItem item) async {
-    // Remember location for this product
     LocationMemoryService.instance.remember(item.product, item.location);
-
     if (_isCloudMode && _pantryId != null) {
       final fsId = await _firestore.addItem(_pantryId!, item);
       return item.copyWith(firestoreId: fsId);
@@ -95,7 +157,6 @@ class SyncProvider extends ChangeNotifier {
 
   Future<void> updateItem(FoodItem item) async {
     LocationMemoryService.instance.remember(item.product, item.location);
-
     if (_isCloudMode && _pantryId != null && item.firestoreId != null) {
       await _firestore.updateItem(_pantryId!, item);
     } else {
@@ -113,7 +174,6 @@ class SyncProvider extends ChangeNotifier {
 
   Future<List<FoodItem>> loadLocalItems() async {
     final items = await _db.getAllItems();
-    // Seed location memory from existing items
     LocationMemoryService.instance.seedFromItems(
       items.map((i) => MapEntry(i.product, i.location)).toList(),
     );
@@ -122,7 +182,7 @@ class SyncProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _itemsSub?.cancel();
+    _authSub?.cancel();
     super.dispose();
   }
 }

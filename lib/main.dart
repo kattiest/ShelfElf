@@ -32,10 +32,22 @@ class ShelfElfApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => SyncProvider()),
         ChangeNotifierProxyProvider<SyncProvider, InventoryProvider>(
-          create: (ctx) =>
-              InventoryProvider(ctx.read<SyncProvider>()),
-          update: (ctx, sync, prev) =>
-              prev ?? InventoryProvider(sync),
+          create: (ctx) {
+            final sync = ctx.read<SyncProvider>();
+            final inv = InventoryProvider(sync);
+            // Tell SyncProvider to call loadItems whenever sync state changes
+            sync.onSyncReady = inv.loadItems;
+            return inv;
+          },
+          update: (ctx, sync, prev) {
+            if (prev != null) {
+              sync.onSyncReady = prev.loadItems;
+              return prev;
+            }
+            final inv = InventoryProvider(sync);
+            sync.onSyncReady = inv.loadItems;
+            return inv;
+          },
         ),
       ],
       child: MaterialApp(
@@ -134,14 +146,6 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _initDeepLinks();
-    // Restore cloud sync if user was previously signed in
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final sync = context.read<SyncProvider>();
-      await sync.initSync();
-      if (mounted) {
-        await context.read<InventoryProvider>().loadItems();
-      }
-    });
   }
 
   Future<void> _initDeepLinks() async {
@@ -225,7 +229,7 @@ class _AppShellState extends State<AppShell> {
               const NavigationDestination(
                 icon: Icon(Icons.auto_awesome_outlined),
                 selectedIcon: Icon(Icons.auto_awesome),
-                label: 'Ask AI',
+                label: 'Ask the Elf',
               ),
             ],
           );
@@ -320,12 +324,11 @@ void _importItems(InventoryProvider provider, List<SharedItem> items,
     provider.addItem(FoodItem(
       upc: '',
       product: shared.product,
-      packageSize: 0,
-      servingSize: 0,
+      quantity: 1,
+      quantityUsed: 1,
       sellByDate: '',
-      percentUsed: 100,
       location: shared.location.isNotEmpty ? shared.location : 'Shopping List',
-      orderingLevel: 100,
+      alertAt: 1,
     ));
     added++;
   }

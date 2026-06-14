@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import '../models/food_item.dart';
@@ -17,11 +19,20 @@ class DatabaseService {
 
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
-    final fullPath = p.join(dbPath, 'shelf_elf.db');
+    final newPath = p.join(dbPath, 'shelf_elf.db');
+    final oldPath = p.join(dbPath, 'pantry_pal.db');
+
+    // Migrate old database file name
+    final oldFile = File(oldPath);
+    final newFile = File(newPath);
+    if (oldFile.existsSync() && !newFile.existsSync()) {
+      await oldFile.copy(newPath);
+      debugPrint('DatabaseService: migrated pantry_pal.db → shelf_elf.db');
+    }
 
     return openDatabase(
-      fullPath,
-      version: 3,
+      newPath,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -33,12 +44,11 @@ class DatabaseService {
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         upc           TEXT    NOT NULL,
         product       TEXT    NOT NULL,
-        package_size  REAL    NOT NULL DEFAULT 0,
-        serving_size  REAL    NOT NULL DEFAULT 0,
+        quantity      INTEGER NOT NULL DEFAULT 1,
+        quantity_used INTEGER NOT NULL DEFAULT 0,
         sell_by_date  TEXT    NOT NULL DEFAULT '',
-        percent_used  INTEGER NOT NULL DEFAULT 0,
         location      TEXT    NOT NULL DEFAULT 'Pantry',
-        ordering_level INTEGER NOT NULL DEFAULT 20,
+        alert_at      INTEGER NOT NULL DEFAULT 1,
         firestore_id  TEXT
       )
     ''');
@@ -68,14 +78,21 @@ class DatabaseService {
       ''');
     }
     if (oldVersion < 3) {
-      // Add firestore_id columns to existing tables
+      try { await db.execute('ALTER TABLE food_items ADD COLUMN firestore_id TEXT'); } catch (_) {}
+      try { await db.execute('ALTER TABLE meal_plans ADD COLUMN firestore_id TEXT'); } catch (_) {}
+    }
+    if (oldVersion < 4) {
+      // Replace percent-based columns with quantity-based columns
+      try { await db.execute('ALTER TABLE food_items ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1'); } catch (_) {}
+      try { await db.execute('ALTER TABLE food_items ADD COLUMN quantity_used INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE food_items ADD COLUMN alert_at INTEGER NOT NULL DEFAULT 1'); } catch (_) {}
+      // If something was 100% used, mark quantity_used = quantity
       try {
-        await db.execute(
-            'ALTER TABLE food_items ADD COLUMN firestore_id TEXT');
-      } catch (_) {}
-      try {
-        await db.execute(
-            'ALTER TABLE meal_plans ADD COLUMN firestore_id TEXT');
+        await db.execute('''
+          UPDATE food_items
+          SET quantity_used = 1
+          WHERE percent_used >= 100
+        ''');
       } catch (_) {}
     }
   }
@@ -110,7 +127,7 @@ class DatabaseService {
     final db = await database;
     final rows = await db.rawQuery('''
       SELECT * FROM food_items
-      WHERE (100 - percent_used) <= ordering_level
+      WHERE (quantity - quantity_used) <= alert_at
       ORDER BY product ASC
     ''');
     return rows.map(FoodItem.fromMap).toList();
@@ -135,14 +152,10 @@ class DatabaseService {
     return db.delete('meal_plans', where: 'id = ?', whereArgs: [id]);
   }
 
-  /// Get all meals for a given week (Mon–Sun containing [weekStart]).
   Future<List<MealPlan>> getMealsForWeek(DateTime weekStart) async {
     final db = await database;
     final start = weekStart.toIso8601String().substring(0, 10);
-    final end = weekStart
-        .add(const Duration(days: 6))
-        .toIso8601String()
-        .substring(0, 10);
+    final end = weekStart.add(const Duration(days: 6)).toIso8601String().substring(0, 10);
     final rows = await db.query(
       'meal_plans',
       where: 'date >= ? AND date <= ?',

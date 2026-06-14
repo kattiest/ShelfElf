@@ -120,7 +120,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 _ResultRow(
                   label: 'Currently',
                   value:
-                      '${existing.percentRemaining}% remaining — ${existing.location}',
+                      '${existing.quantityRemaining} of ${existing.quantity} remaining — ${existing.location}',
                 ),
               ],
 
@@ -222,7 +222,12 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Future<void> _restockItem(FoodItem item) async {
     final provider = context.read<InventoryProvider>();
-    await provider.restockItem(item);
+    // Add 1 to quantity (new unit scanned) and reduce quantityUsed if > 0
+    final updated = item.copyWith(
+      quantity: item.quantity + 1,
+      quantityUsed: item.quantityUsed > 0 ? item.quantityUsed - 1 : 0,
+    );
+    await provider.restockItem(updated);
 
     if (!mounted) return;
 

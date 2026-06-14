@@ -84,13 +84,13 @@ class GeminiService {
         ? 'The user currently has no items in their pantry.'
         : inventory.map((item) {
             final status = item.isLow
-                ? 'LOW (${item.percentRemaining}% remaining)'
-                : '${item.percentRemaining}% remaining';
+                ? 'LOW (${item.quantityRemaining} of ${item.quantity} remaining)'
+                : '${item.quantityRemaining} of ${item.quantity} remaining';
             return '- ${item.product}: $status';
           }).join('\n');
 
     final systemPrompt = '''
-You are Shelf Elf, a friendly kitchen and pantry assistant built into a food inventory app.
+You are the Elf, a friendly kitchen and pantry assistant built into the Shelf Elf food inventory app.
 The user's current pantry inventory:
 $inventorySummary
 
@@ -136,7 +136,7 @@ Keep your total response concise and practical.
             .join('\n');
 
     final systemPrompt = '''
-You are Shelf Elf, a friendly kitchen and pantry assistant.
+You are the Elf, a friendly kitchen and pantry assistant.
 The user's current inventory:
 $inventorySummary
 Keep responses concise and practical.
