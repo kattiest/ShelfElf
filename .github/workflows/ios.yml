@@ -18,6 +18,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Restore api_config placeholder (real key is local-only, gitignored)
+        run: cp lib/config/api_config.ci.dart lib/config/api_config.dart
+
       - name: Flutter pub get
         run: flutter pub get
 
