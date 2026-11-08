@@ -57,6 +57,11 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- AdMob App ID — replace with real ID from admob.google.com -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-4633288452277147~4154678053"/>
+
     </application>
 
     <!-- Queries for camera apps on Android 11+ -->

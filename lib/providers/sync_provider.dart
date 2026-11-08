@@ -31,10 +31,15 @@ class SyncProvider extends ChangeNotifier {
   String? get uid => _auth.uid;
   bool get isSignedIn => _auth.isSignedIn;
 
-  SyncProvider() {
-    // Auto-respond to Firebase auth state changes
-    _authSub =
-        FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
+  SyncProvider({bool firebaseAvailable = true}) {
+    if (firebaseAvailable) {
+      // Auto-respond to Firebase auth state changes
+      _authSub =
+          FirebaseAuth.instance.authStateChanges().listen(_onAuthChanged);
+    } else {
+      // Firebase not configured — stay in local-only mode, load items once
+      Future.microtask(() => onSyncReady?.call());
+    }
   }
 
   Future<void> _onAuthChanged(User? user) async {

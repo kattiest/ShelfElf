@@ -31,6 +31,13 @@
 # speech_to_text
 -keep class com.csdcorp.speech_to_text.** { *; }
 
+# Room / WorkManager — R8 renaming breaks Room's runtime reflection
+-keep class androidx.room.RoomDatabase { *; }
+-keep class androidx.work.impl.WorkDatabase { *; }
+-keep class androidx.work.impl.** { *; }
+-keep class androidx.room.** { *; }
+-dontwarn androidx.room.**
+
 # Prevent stripping of annotations used by plugins
 -keepattributes *Annotation*
 -keepattributes Signature

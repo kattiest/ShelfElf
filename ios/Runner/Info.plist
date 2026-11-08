@@ -72,6 +72,9 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<!-- AdMob App ID — replace with real ID from admob.google.com -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-4633288452277147~4154678053</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

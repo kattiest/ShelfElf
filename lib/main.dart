@@ -10,15 +10,21 @@ import 'screens/inventory_screen.dart';
 import 'screens/shopping_list_screen.dart';
 import 'screens/ai_chat_screen.dart';
 import 'screens/meal_plan_screen.dart';
+// import 'services/ad_service.dart';
 import 'services/share_service.dart';
+// import 'widgets/banner_ad_widget.dart';
+
+bool _firebaseAvailable = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp();
+    _firebaseAvailable = true;
   } catch (_) {
-    // Firebase not configured yet — runs in local-only mode
+    _firebaseAvailable = false;
   }
+  // Ads disabled: // await AdService.instance.initialize();
   runApp(const ShelfElfApp());
 }
 
@@ -30,7 +36,7 @@ class ShelfElfApp extends StatelessWidget {
     // SyncProvider must come first since InventoryProvider depends on it
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => SyncProvider()),
+        ChangeNotifierProvider(create: (_) => SyncProvider(firebaseAvailable: _firebaseAvailable)),
         ChangeNotifierProxyProvider<SyncProvider, InventoryProvider>(
           create: (ctx) {
             final sync = ctx.read<SyncProvider>();
@@ -191,7 +197,11 @@ class _AppShellState extends State<AppShell> {
           return e.value;
         }).toList(),
       ),
-      bottomNavigationBar: Consumer<InventoryProvider>(
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Ads disabled: // const BannerAdWidget(),
+          Consumer<InventoryProvider>(
         builder: (context, provider, _) {
           final lowCount = provider.shoppingList.length;
           return NavigationBar(
@@ -234,6 +244,8 @@ class _AppShellState extends State<AppShell> {
             ],
           );
         },
+      ),
+        ],
       ),
     );
   }
