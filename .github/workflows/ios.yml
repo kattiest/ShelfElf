@@ -24,13 +24,17 @@ jobs:
       - name: Install xcpretty
         run: gem install xcpretty
 
-      - name: Build Flutter iOS release (no codesign)
-        run: set -o pipefail; flutter build ios --release --no-codesign -v 2>&1 | tail -150
-        env:
-          CODE_SIGN_IDENTITY: ""
-          CODE_SIGNING_REQUIRED: "NO"
-          CODE_SIGNING_ALLOWED: "NO"
-          DEVELOPMENT_TEAM: ""
+      - name: Configure Flutter iOS build (no codesign)
+        run: flutter build ios --config-only --release --no-codesign
+
+      - name: xcodebuild (no codesign, full log)
+        run: >
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner
+          -configuration Release -sdk iphoneos -destination 'generic/platform=iOS'
+          -derivedDataPath build/ios build
+          CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          DEVELOPMENT_TEAM="" AD_HOC_CODE_SIGNING_ALLOWED=YES
+          2>&1 | tee build_log.txt | tail -80; echo "=== script phase errors ==="; grep -B2 -A8 -iE "error:|failed with" build_log.txt | head -60
 
       - name: Archive with xcodebuild
         run: |
