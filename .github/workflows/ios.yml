@@ -25,7 +25,7 @@ jobs:
         run: gem install xcpretty
 
       - name: Build Flutter iOS release (no codesign)
-        run: flutter build ios --release --no-codesign
+        run: set -o pipefail; flutter build ios --release --no-codesign -v 2>&1 | tail -150
         env:
           CODE_SIGN_IDENTITY: ""
           CODE_SIGNING_REQUIRED: "NO"
